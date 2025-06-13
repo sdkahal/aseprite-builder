@@ -56,14 +56,11 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # ❗必须这样，才能包含 tags
 
-      - name: Clone Aseprite from tag properly
-        shell: bash
-        run: |
-          git clone --recurse-submodules https://github.com/aseprite/aseprite.git
-          cd aseprite
-          git fetch --tags
-          git checkout tags/${{ needs.create-release.outputs.release-tag }}
+      - name: Checkout correct tag
+        run: git checkout tags/${{ needs.create-release.outputs.release-tag }}
 
       - name: Install Skia
         working-directory: aseprite

@@ -54,74 +54,86 @@ jobs:
       matrix:
         os: [windows-latest]
       fail-fast: false
+
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # ❗必须这样，才能包含 tags
 
-      - name: Checkout correct tag
-        run: git checkout tags/${{ needs.create-release.outputs.release-tag }}
+      - name: Clone Aseprite source
+        run: |
+          git clone --recursive https://github.com/aseprite/aseprite.git
+          cd aseprite
+          git checkout tags/${{ needs.create-release.outputs.release-tag }}
 
       - name: Install Skia
-        working-directory: .
+        working-directory: aseprite
         shell: bash
         run: |
-          choco install wget -y --no-progress
-          wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
-          unzip Skia-Windows-Release-x64.zip -d skia
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            choco install wget -y --no-progress
+            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
+            unzip Skia-Windows-Release-x64.zip -d skia
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-macOS-Release-arm64.zip
+            unzip Skia-macOS-Release-arm64.zip -d skia
+          else
+            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Linux-Release-x64.zip
+            unzip Skia-Linux-Release-x64.zip -d skia
+          fi
 
       - uses: aseprite/get-ninja@main
+
       - uses: ilammy/msvc-dev-cmd@v1
         if: runner.os == 'Windows'
 
-      - name: Generating Makefiles
+      - name: Generate Build Files
+        working-directory: aseprite
         shell: bash
-        working-directory: .
         run: |
           export enable_ccache=off
           export laf_backend=skia
           export enable_scripting=on
-          export skia_arch=x64
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            export skia_arch=arm64
+          else
+            export skia_arch=x64
+          fi
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
+            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9 \
             -DENABLE_TESTS=OFF \
             -DENABLE_SCRIPTING=$enable_scripting \
             -DENABLE_CCACHE=$enable_ccache \
             -DLAF_BACKEND=$laf_backend \
             -DSKIA_DIR=$(realpath skia) \
-            -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-$skia_arch) \
-            -DOPENSSL_USE_STATIC_LIBS=ON
+            -DOPENSSL_USE_STATIC_LIBS=ON \
+            -DSKIA_LIBRARY_DIR=$(realpath skia/out/Release-$skia_arch)
 
-      - name: Compiling
+      - name: Build Aseprite
         shell: bash
-        working-directory: .
+        working-directory: aseprite
         run: cd build && ninja
 
-      - name: Check Aseprite version
+      - name: Print Aseprite Version
+        run: ./aseprite/build/bin/aseprite --version
+
+      - name: Clean Up Build Folder
         shell: bash
-        working-directory: ./build/bin
-        run: |
-          if [[ -f aseprite.exe ]]; then
-            ./aseprite.exe --version
-          else
-            ./aseprite --version
-          fi
+        working-directory: aseprite/build/bin
+        run: find . -mindepth 1 ! \( -name 'aseprite' -o -name 'aseprite.exe' -o -name 'data' -prune \) -exec rm -rf {} +
 
-      - name: Clean Up Build folder
-        working-directory: ./build/bin
+      - name: Make Portable
         shell: bash
-        run: find . -mindepth 1 ! \( -name 'aseprite.exe' -o -name 'aseprite' -o -name 'data' -prune \) -exec rm -rf {} +
+        working-directory: aseprite/build/bin
+        run: echo '# Make Aseprite portable' > aseprite.ini
 
-      - name: Make portable zip
-        working-directory: ./build/bin
-        run: echo '# This file is here so Aseprite behaves as a portable program' > aseprite.ini
+      - name: Create Release ZIP
+        shell: bash
+        working-directory: aseprite/build/bin
+        run: 7z a Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip *
 
-      - name: Create release archive
-        working-directory: ./build/bin
-        run: 7z -tzip a Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip *
-
-      - name: Upload release asset
+      - name: Upload Release ZIP
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}

@@ -64,26 +64,24 @@ jobs:
           cd aseprite
           git checkout tags/${{ needs.create-release.outputs.release-tag }}
 
+      - name: Set fixed version manually
+        working-directory: aseprite
+        shell: bash
+        run: |
+          rm -rf .git
+          sed -i 's/set(VERSION "1.x-dev")/set(VERSION "${{ needs.create-release.outputs.release-tag }}")/' src/ver/CMakeLists.txt
+
       - name: Install Skia
         working-directory: aseprite
         shell: bash
         run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            choco install wget -y --no-progress
-            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
-            unzip Skia-Windows-Release-x64.zip -d skia
-          elif [[ "${{ runner.os }}" == "macOS" ]]; then
-            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-macOS-Release-arm64.zip
-            unzip Skia-macOS-Release-arm64.zip -d skia
-          else
-            wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Linux-Release-x64.zip
-            unzip Skia-Linux-Release-x64.zip -d skia
-          fi
+          choco install wget -y --no-progress
+          wget https://github.com/aseprite/skia/releases/download/m124-08a5439a6b/Skia-Windows-Release-x64.zip
+          unzip Skia-Windows-Release-x64.zip -d skia
 
       - uses: aseprite/get-ninja@main
 
       - uses: ilammy/msvc-dev-cmd@v1
-        if: runner.os == 'Windows'
 
       - name: Generate Build Files
         working-directory: aseprite
@@ -92,16 +90,10 @@ jobs:
           export enable_ccache=off
           export laf_backend=skia
           export enable_scripting=on
-
-          if [[ "${{ runner.os }}" == "macOS" ]]; then
-            export skia_arch=arm64
-          else
-            export skia_arch=x64
-          fi
+          export skia_arch=x64
 
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }} \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=10.9 \
             -DENABLE_TESTS=OFF \
             -DENABLE_SCRIPTING=$enable_scripting \
             -DENABLE_CCACHE=$enable_ccache \
@@ -116,6 +108,7 @@ jobs:
         run: cd build && ninja
 
       - name: Print Aseprite Version
+        shell: bash
         run: ./aseprite/build/bin/aseprite --version
 
       - name: Clean Up Build Folder

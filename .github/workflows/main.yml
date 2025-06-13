@@ -63,7 +63,7 @@ jobs:
         run: git checkout tags/${{ needs.create-release.outputs.release-tag }}
 
       - name: Install Skia
-        working-directory: aseprite
+        working-directory: .
         shell: bash
         run: |
           choco install wget -y --no-progress
@@ -76,7 +76,7 @@ jobs:
 
       - name: Generating Makefiles
         shell: bash
-        working-directory: aseprite
+        working-directory: .
         run: |
           export enable_ccache=off
           export laf_backend=skia
@@ -95,12 +95,12 @@ jobs:
 
       - name: Compiling
         shell: bash
-        working-directory: aseprite
+        working-directory: .
         run: cd build && ninja
 
       - name: Check Aseprite version
         shell: bash
-        working-directory: aseprite/build/bin
+        working-directory: ./build/bin
         run: |
           if [[ -f aseprite.exe ]]; then
             ./aseprite.exe --version
@@ -109,16 +109,16 @@ jobs:
           fi
 
       - name: Clean Up Build folder
-        working-directory: aseprite/build/bin
+        working-directory: ./build/bin
         shell: bash
         run: find . -mindepth 1 ! \( -name 'aseprite.exe' -o -name 'aseprite' -o -name 'data' -prune \) -exec rm -rf {} +
 
       - name: Make portable zip
-        working-directory: aseprite/build/bin
+        working-directory: ./build/bin
         run: echo '# This file is here so Aseprite behaves as a portable program' > aseprite.ini
 
       - name: Create release archive
-        working-directory: aseprite/build/bin
+        working-directory: ./build/bin
         run: 7z -tzip a Aseprite-${{ needs.create-release.outputs.release-tag }}-${{ runner.os }}.zip *
 
       - name: Upload release asset
